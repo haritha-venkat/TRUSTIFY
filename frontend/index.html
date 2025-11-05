@@ -1,0 +1,92 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Trustify Demo</title>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  <style>body{font-family:Arial;max-width:800px;margin:20px auto;padding:12px}input,button{padding:8px;margin-top:6px;width:100%}</style>
+</head>
+<body>
+  <h2>Trustify — Demo Frontend</h2>
+
+  <div>
+    <label>Contract address</label>
+    <input id="contractAddress" value="0xC49210F2bd9fcF70B7eC60729012B0110c7A3980" />
+  </div>
+
+  <h3>1) Simulate Purchase (Backend mints)</h3>
+  <label>Buyer address (Ganache account)</label>
+  <input id="buyer" placeholder="0x..." />
+  <label>Order ID</label>
+  <input id="orderId" value="ORDER001" />
+  <button id="mintBackend">Create Order & Mint Token (Backend)</button>
+  <pre id="mintResult"></pre>
+
+  <hr/>
+
+  <h3>2) Verify Ownership (MetaMask)</h3>
+  <button id="connectMeta">Connect MetaMask</button>
+  <div id="connected">Not connected</div>
+
+  <label>Token ID to verify</label>
+  <input id="tokenId" value="1" />
+  <button id="verifyBtn">Check Ownership</button>
+
+  <pre id="verifyResult"></pre>
+
+<script>
+const ABI = [
+  "function ownerOf(uint256 tokenId) view returns (address)",
+  "function tokenMetadata(uint256 tokenId) view returns (string)"
+];
+
+let provider, signer, userAddr;
+
+document.getElementById('connectMeta').onclick = async () => {
+  if (!window.ethereum) return alert("Install MetaMask");
+  await window.ethereum.request({ method: 'eth_requestAccounts' });
+  provider = new ethers.providers.Web3Provider(window.ethereum);
+  signer = provider.getSigner();
+  userAddr = await signer.getAddress();
+  document.getElementById('connected').innerText = "Connected: " + userAddr;
+};
+
+document.getElementById('mintBackend').onclick = async () => {
+  const buyer = document.getElementById('buyer').value.trim();
+  const orderId = document.getElementById('orderId').value.trim();
+  if (!buyer || !orderId) return alert("Enter buyer and orderId");
+  try {
+    const res = await fetch("http://localhost:4000/mint", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ buyer, orderId })
+    });
+    const data = await res.json();
+    document.getElementById('mintResult').innerText = JSON.stringify(data, null, 2);
+  } catch(e) {
+    document.getElementById('mintResult').innerText = String(e);
+  }
+};
+
+document.getElementById('verifyBtn').onclick = async () => {
+  const contractAddr = document.getElementById('contractAddress').value.trim();
+  const tokenId = document.getElementById('tokenId').value.trim();
+  if (!contractAddr || !tokenId) return alert("contract and tokenId required");
+  try {
+    if (!provider) provider = new ethers.providers.Web3Provider(window.ethereum);
+    const contract = new ethers.Contract(contractAddr, ABI, provider);
+    const owner = await contract.ownerOf(tokenId);
+    let metadata = "(not available)";
+    try { metadata = await contract.tokenMetadata(tokenId); } catch(e){}
+    const accounts = await provider.send("eth_requestAccounts", []);
+    const connected = accounts && accounts[0];
+    const verified = connected && owner.toLowerCase() === connected.toLowerCase();
+    document.getElementById('verifyResult').innerText = 
+      `Owner: ${owner}\nMetadata: ${metadata}\nConnected: ${connected}\nVerified: ${verified}`;
+  } catch(e) {
+    document.getElementById('verifyResult').innerText = String(e);
+  }
+};
+</script>
+</body>
+</html>
